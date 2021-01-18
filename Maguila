@@ -1,0 +1,174 @@
+//+------------------------------------------------------------------+
+//|                                                      Maguila.mq5 |
+//|                       Copyright 2021, Virologista Kerntopf Corp. |
+//|                                             https://www.mql5.com |
+//+------------------------------------------------------------------+
+#property copyright "Copyright 2021, Virologista Kerntopf Corp."
+#property link      "https://www.mql5.com"
+#property version   "1.00"
+#property description " "
+#property description "MAGUILA é um setup parametrizado por Rodrigo Cohen | Analista CNPI-T"
+#property description " "
+#property description "Colore os candlesticks conforme inflexão da média dinâmica de McGinley"
+#property description "Segue tendência conforme acompanhamento de médias móveis"
+#property description "Desabilita ou permite modificar a coloração dos candlesticks e das médias"
+//--- indicator settings
+#property indicator_chart_window
+#property indicator_buffers 8
+#property indicator_plots   3
+//--- plot Label1
+#property indicator_label1  "Coloração do Maguila"
+#property indicator_type1   DRAW_COLOR_CANDLES
+#property indicator_color1  C'0,175,0',C'175,0,0',C'0,0,175'
+#property indicator_style1  STYLE_SOLID
+#property indicator_width1  1
+//--- plot Label2
+#property indicator_label2  "Média móvel rápida"
+#property indicator_type2   DRAW_LINE
+#property indicator_color2  C'0,175,0'
+#property indicator_style2  STYLE_DOT
+#property indicator_width2  2
+//--- plot Label3
+#property indicator_label3  "Média móvel lenta"
+#property indicator_type3   DRAW_LINE
+#property indicator_color3  C'175,0,0'
+#property indicator_style3  STYLE_DOT
+#property indicator_width3  2
+//--- Enuns do indicador
+enum enColoracao
+  {
+   enColPadrao,      // Padrão do analista
+   enColCustomizar,  // Customizado pelo trader
+   enColDesabilitar  // Desabilitar coloração
+  };
+//--- Parâmetros dos input
+input group "Setup Maguila"                              // Grupo para os parâmetros do Maguila
+input int InpMaguilaPeriodos = 20;                       // Quantidade de barras para formação do Maguila
+input enColoracao InpMaguilaCores = enColPadrao;         // Customizar a coloração das barras
+input color InpMaguilaCorAlta = clrGoldenrod;            // Cor das barras para o movimento de alta
+input color InpMaguilaCorBaixa = clrSlateGray;           // Cor das barras para o movimento de baixa
+input group "Médias móveis"                              // Grupo para os parâmetros das médias móveis
+input int InpMaguilaMMRapida = 21;                       // Quantidade de barras para a média rápida
+input color InpMaguilaCorMMRap = clrGoldenrod;           // Coloração da média rapida
+input ENUM_MA_METHOD InpMaguilaMMRapMetodo = MODE_EMA;   // Método de Suavização
+input int InpMaguilaMMLenta = 42;                        // Quantidade de barras para a média lenta
+input color InpMaguilaCorMMLen = clrSlateGray;           // Coloração da média lenta
+input ENUM_MA_METHOD InpMaguilaMMLenMetodo = MODE_EMA;   // Método de Suavização
+//--- Buffers do indicador
+double ExtMaguilaAbrBuffer[];          // Buffer para valores de abertura das barras
+double ExtMaguilaMaxBuffer[];          // Buffer para valores de máxima das barras
+double ExtMaguilaMinBuffer[];          // Buffer para valores de mínima das barras
+double ExtMaguilaFchBuffer[];          // Buffer para valores de fechamento das barras
+double ExtMaguilaCorBuffer[];          // Buffer para valores de formação das cores das barras
+double ExtMaguilaSetupTempBuffer[1];   // Buffer para valores temporários da média de McGinley
+double ExtMaguilaSetupBuffer[];        // Buffer para valores da média de McGinley
+double ExtMaguilaRapBuffer[];          // Buffer para valores da média rápida
+double ExtMaguilaLenBuffer[];          // Buffer para valores da média lenta
+//--- Variáveis globais
+int ExtMaguilaSetupHandle;
+int ExtMaguilaRapHandle;
+int ExtMaguilaLenHandle;
+//+------------------------------------------------------------------+
+//| Indicador personalizado função de inicialização                  |
+//+------------------------------------------------------------------+
+int OnInit()
+  {
+//--- Mapeamento de dados para os buffers
+   SetIndexBuffer(0,ExtMaguilaAbrBuffer,INDICATOR_DATA);
+   SetIndexBuffer(1,ExtMaguilaMaxBuffer,INDICATOR_DATA);
+   SetIndexBuffer(2,ExtMaguilaMinBuffer,INDICATOR_DATA);
+   SetIndexBuffer(3,ExtMaguilaFchBuffer,INDICATOR_DATA);
+   SetIndexBuffer(4,ExtMaguilaCorBuffer,INDICATOR_COLOR_INDEX);
+   SetIndexBuffer(5,ExtMaguilaRapBuffer,INDICATOR_CALCULATIONS);
+   SetIndexBuffer(6,ExtMaguilaLenBuffer,INDICATOR_CALCULATIONS);
+   SetIndexBuffer(7,ExtMaguilaSetupBuffer,INDICATOR_CALCULATIONS);
+//--- Define o número de cores indexados, usado para potar no gráfico
+   PlotIndexSetInteger(0,PLOT_COLOR_INDEXES,2);
+   PlotIndexSetInteger(1,PLOT_COLOR_INDEXES,0);
+   PlotIndexSetInteger(2,PLOT_COLOR_INDEXES,0);
+//--- Definir cor para cada indexação
+   PlotIndexSetInteger(0,PLOT_LINE_COLOR,0,InpMaguilaCorAlta);
+   PlotIndexSetInteger(0,PLOT_LINE_COLOR,2,InpMaguilaCorBaixa);
+   PlotIndexSetInteger(1,PLOT_LINE_COLOR,0,InpMaguilaCorMMRap);
+   PlotIndexSetInteger(2,PLOT_LINE_COLOR,0,InpMaguilaCorMMLen);
+//--- Definir função que retorna o manipulador do indicador
+   ExtMaguilaSetupHandle=iCustom(_Symbol,_Period,"Examples\\McGinley_Dynamic",InpMaguilaPeriodos);
+   ExtMaguilaRapHandle=iMA(_Symbol,_Period,InpMaguilaMMRapida,0,InpMaguilaMMRapMetodo,PRICE_CLOSE);
+   ExtMaguilaLenHandle=iMA(_Symbol,_Period,InpMaguilaMMLenta,0,InpMaguilaMMLenMetodo,PRICE_CLOSE);
+//--- Definir o nome de indicador na indexação
+   IndicatorSetString(INDICATOR_SHORTNAME,"Setup: Maguila - 1.0");
+//--- Definir o texto de cada indexação
+   PlotIndexSetString(0,PLOT_LABEL,"Coloração do Maguila");
+   PlotIndexSetString(1,PLOT_LABEL,"Média móvel rápida");
+   PlotIndexSetString(2,PLOT_LABEL,"Média móvel lenta");
+   return(INIT_SUCCEEDED);
+  }
+//+------------------------------------------------------------------+
+//| Indicador personalizado função de iteração/repetição             |
+//+------------------------------------------------------------------+
+int OnCalculate(const int rates_total,
+                const int prev_calculated,
+                const datetime &time[],
+                const double &open[],
+                const double &high[],
+                const double &low[],
+                const double &close[],
+                const long &tick_volume[],
+                const long &volume[],
+                const int &spread[])
+  {
+//--- Plotagem de dados das mádias móveis
+   CopyBuffer(ExtMaguilaRapHandle,0,0,rates_total,ExtMaguilaRapBuffer);
+   CopyBuffer(ExtMaguilaLenHandle,0,0,rates_total,ExtMaguilaLenBuffer);
+//--- Parâmetros para apresentação da coloração no gráfico que inicía-se pelo padrão
+   if(InpMaguilaCores==enColPadrao)
+     {
+      PlotIndexSetInteger(0,PLOT_LINE_COLOR,0,C'0,175,0');  // Maguila para cima
+      PlotIndexSetInteger(0,PLOT_LINE_COLOR,1,C'175,0,0');  // Maguila para baixo
+      PlotIndexSetInteger(1,PLOT_LINE_COLOR,0,C'0,175,0');  // Média móvel rápida
+      PlotIndexSetInteger(2,PLOT_LINE_COLOR,0,C'175,0,0');  // Média móvel lenta
+     }
+//--- Parâmetros para customizar a coloração no gráfico
+   else
+      if(InpMaguilaCores==enColCustomizar)
+        {
+         PlotIndexSetInteger(0,PLOT_LINE_COLOR,0,InpMaguilaCorAlta);    // Maguila para cima
+         PlotIndexSetInteger(0,PLOT_LINE_COLOR,1,InpMaguilaCorBaixa);   // Maguila para baixo
+         PlotIndexSetInteger(1,PLOT_LINE_COLOR,0,InpMaguilaCorMMRap);   // Média móvel rápida
+         PlotIndexSetInteger(2,PLOT_LINE_COLOR,0,InpMaguilaCorMMLen);   // Média móvel lenta
+        }
+      //--- Parâmetros para desabilitar a coloração no gráfico
+      else
+         if(InpMaguilaCores==enColDesabilitar)
+           {
+            PlotIndexSetInteger(0,PLOT_LINE_COLOR,0,clrNONE);  // Maguila para cima
+            PlotIndexSetInteger(0,PLOT_LINE_COLOR,1,clrNONE);  // Maguila para baixo
+            PlotIndexSetInteger(1,PLOT_LINE_COLOR,0,clrNONE);  // Média móvel rápida
+            PlotIndexSetInteger(2,PLOT_LINE_COLOR,0,clrNONE);  // Média móvel lenta
+           }
+//--- Preencher os buffers de dados e os buffers para os índices de cores para cada barra
+   for(int i=prev_calculated; i<=rates_total-1; i++)
+     {
+      //--- Copiar os dados do indicador McGinley para o buffer temporário
+      CopyBuffer(ExtMaguilaSetupHandle,0,BarsCalculated(ExtMaguilaSetupHandle)-i-1,1,ExtMaguilaSetupTempBuffer);
+      //--- Copiar os valores do buffer temporário para o indicador do buffer
+      ExtMaguilaSetupBuffer[i]=ExtMaguilaSetupTempBuffer[0];
+      //--- Definir dados para a plotagem
+      ExtMaguilaAbrBuffer[i]=open[i];  //Preço de abertura
+      ExtMaguilaMaxBuffer[i]=high[i];  //Preço da máxima
+      ExtMaguilaMinBuffer[i]=low[i];   //Preço da mínima
+      ExtMaguilaFchBuffer[i]=close[i]; //Preço de fechamento
+      //--- Adicionar condições para a coloração das barras
+      if(ExtMaguilaSetupBuffer[i]<ExtMaguilaFchBuffer[i])
+        {
+         ExtMaguilaCorBuffer[i]=0; //Atribui ao índice da barra a cor 0
+        }
+      else
+        {
+         ExtMaguilaCorBuffer[i]=1; //Atribui ao índice da barra a cor 1
+        }
+     }
+//--- Returna o número de cálculo das barras e subtrai 1 para o recálculo da barra.
+   return(rates_total-1);
+  }
+//+------------------------------------------------------------------+
