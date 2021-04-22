@@ -1,0 +1,194 @@
+//+------------------------------------------------------------------+
+//|                                     MACD_Histograma_colorido.mq5 |
+//|                            Virologista 2020, Gustavo F. Kerntopf |
+//|                                             https://www.mql5.com |
+//+------------------------------------------------------------------+
+#property copyright "Copyright 2019-2021, Virologista Kerntopf Corp."
+#property link      "https://www.mql5.com"
+#property version   "1.00"
+#property icon      "\\Images\\Logo.ico"
+#property description "Indicador desenvolvido por Thomas Aspray em 1986"
+#property description " "
+#property description "MACD-Histograma mede a distância entre o MACD e sua linha sinal - a média de 9 dias do MACD"
+#property description "A coloração do MACD-Histograma muda conforme a variação da linha sinal no MACD"
+#include <MovingAverages.mqh>
+//--- indicator settings
+#property indicator_separate_window
+#property indicator_buffers 6
+#property indicator_plots   3
+#property indicator_type1   DRAW_LINE
+#property indicator_type2   DRAW_LINE
+#property indicator_type3   DRAW_COLOR_HISTOGRAM
+#property indicator_color1  clrSilver
+#property indicator_color2  clrRed
+#property indicator_color3  clrGoldenrod,clrGold,clrDarkGoldenrod,clrSlateGray,clrDarkSlateGray,clrSilver,clrBlack,clrWhite
+#property indicator_width1  1
+#property indicator_width2  1
+#property indicator_width3  10
+#property indicator_label1  "Linha MACD"
+#property indicator_label2  "Linha Sinal"
+#property indicator_label3  "Histograma MACD"
+#property indicator_style1  STYLE_DOT
+#property indicator_style2  STYLE_DOT
+//--- input parameters
+input int InpFastEMA=12;                              // Parâmetros da Média Curta
+input int InpSlowEMA=26;                              // Parâmetros da Média Longa
+input int InpSignalSMA=9;                             // Parâmetros do Sinal
+input ENUM_APPLIED_PRICE InpAppliedPrice=PRICE_CLOSE; // Preço aplicado ao cálculo
+//--- indicator buffers
+double                   ExtMacdBuffer[];
+double                   ExtSignalBuffer[];
+double                   ExtFastMaBuffer[];
+double                   ExtSlowMaBuffer[];
+double                   ExtHistogramBuffer[];
+double                   ExtColorBuffer[];
+//--- MA handles
+int                      ExtFastMaHandle;
+int                      ExtSlowMaHandle;
+//+------------------------------------------------------------------+
+//| Custom indicator initialization function                         |
+//+------------------------------------------------------------------+
+void OnInit()
+  {
+//--- indicator buffers mapping
+   SetIndexBuffer(0,ExtMacdBuffer,INDICATOR_DATA);
+   SetIndexBuffer(1,ExtSignalBuffer,INDICATOR_DATA);
+   SetIndexBuffer(2,ExtHistogramBuffer,INDICATOR_DATA);
+   SetIndexBuffer(3,ExtColorBuffer,INDICATOR_COLOR_INDEX);
+   SetIndexBuffer(4,ExtFastMaBuffer,INDICATOR_CALCULATIONS);
+   SetIndexBuffer(5,ExtSlowMaBuffer,INDICATOR_CALCULATIONS);
+//--- Define o número de cores indexados, usado para potar no gráfico
+   PlotIndexSetInteger(2,PLOT_COLOR_INDEXES,8);
+//--- Seleciona cor para cada indexados
+   PlotIndexSetInteger(2,PLOT_LINE_COLOR,0,clrGoldenrod);
+   PlotIndexSetInteger(2,PLOT_LINE_COLOR,1,clrGold);
+   PlotIndexSetInteger(2,PLOT_LINE_COLOR,2,clrDarkGoldenrod);
+   PlotIndexSetInteger(2,PLOT_LINE_COLOR,3,clrSlateGray);
+   PlotIndexSetInteger(2,PLOT_LINE_COLOR,4,clrDarkSlateGray);
+   PlotIndexSetInteger(2,PLOT_LINE_COLOR,5,clrSilver);
+   PlotIndexSetInteger(2,PLOT_LINE_COLOR,6,clrBlack);
+   PlotIndexSetInteger(2,PLOT_LINE_COLOR,7,clrWhite);
+//--- name for indicator subwindow label
+   string short_name=StringFormat("MACD histograma colorido (%d,%d,%d)",InpFastEMA,InpSlowEMA,InpSignalSMA);
+   IndicatorSetString(INDICATOR_SHORTNAME,short_name);
+//--- get MA handles
+   ExtFastMaHandle=iMA(NULL,0,InpFastEMA,0,MODE_EMA,InpAppliedPrice);
+   ExtSlowMaHandle=iMA(NULL,0,InpSlowEMA,0,MODE_EMA,InpAppliedPrice);
+//--- initialization done
+  }
+//+------------------------------------------------------------------+
+//| Moving Averages Convergence/Divergence Histogram                 |
+//+------------------------------------------------------------------+
+int OnCalculate(const int rates_total,
+                const int prev_calculated,
+                const datetime &time[],
+                const double &open[],
+                const double &high[],
+                const double &low[],
+                const double &close[],
+                const long &tick_volume[],
+                const long &volume[],
+                const int &spread[])
+  {
+//--- check for data
+   if(rates_total<InpSignalSMA)
+      return(0);
+//--- not all data may be calculated
+   int calculated=BarsCalculated(ExtFastMaHandle);
+   if(calculated<rates_total)
+     {
+      Print("Not all data of ExtFastMaHandle is calculated (",calculated,"bars ). Error",GetLastError());
+      return(0);
+     }
+   calculated=BarsCalculated(ExtSlowMaHandle);
+   if(calculated<rates_total)
+     {
+      Print("Not all data of ExtSlowMaHandle is calculated (",calculated,"bars ). Error",GetLastError());
+      return(0);
+     }
+//--- we can copy not all data
+   int to_copy;
+   if(prev_calculated>rates_total || prev_calculated<0)
+      to_copy=rates_total;
+   else
+     {
+      to_copy=rates_total-prev_calculated;
+      if(prev_calculated>0)
+         to_copy++;
+     }
+//--- get Fast EMA buffer
+   if(IsStopped())
+      return(0); //Checking for stop flag
+   if(CopyBuffer(ExtFastMaHandle,0,0,to_copy,ExtFastMaBuffer)<=0)
+     {
+      Print("Getting fast EMA is failed! Error",GetLastError());
+      return(0);
+     }
+//--- get SlowSMA buffer
+   if(IsStopped())
+      return(0); //Checking for stop flag
+   if(CopyBuffer(ExtSlowMaHandle,0,0,to_copy,ExtSlowMaBuffer)<=0)
+     {
+      Print("Getting slow SMA is failed! Error",GetLastError());
+      return(0);
+     }
+//---
+   int limit;
+   if(prev_calculated==0)
+      limit=0;
+   else
+      limit=prev_calculated-1;
+//--- calculate MACD
+   for(int i=limit; i<rates_total && !IsStopped(); i++)
+      ExtMacdBuffer[i]=ExtFastMaBuffer[i]-ExtSlowMaBuffer[i];
+//--- calculate Signal
+   SimpleMAOnBuffer(rates_total,prev_calculated,0,InpSignalSMA,ExtMacdBuffer,ExtSignalBuffer);
+//--- calculate Histogram MACD
+   for(int i=limit; i<rates_total && !IsStopped(); i++)
+     {
+      ExtHistogramBuffer[i]=ExtMacdBuffer[i]-ExtSignalBuffer[i];
+      if(ExtMacdBuffer[i]>0&&ExtSignalBuffer[i]>0&&ExtHistogramBuffer[i]>0)
+        {
+         ExtColorBuffer[i]=0;
+        }
+      else
+         if(ExtMacdBuffer[i]>0&&ExtSignalBuffer[i]>0&&ExtHistogramBuffer[i]<0)
+           {
+            ExtColorBuffer[i]=3;
+           }
+         else
+            if(ExtMacdBuffer[i]>0&&ExtSignalBuffer[i]<0&&ExtHistogramBuffer[i]>0)
+              {
+               ExtColorBuffer[i]=2;
+              }
+            else
+               if(ExtMacdBuffer[i]>0&&ExtSignalBuffer[i]<0&&ExtHistogramBuffer[i]<0)
+                 {
+                  ExtColorBuffer[i]=1;
+                 }
+
+               else
+                  if(ExtMacdBuffer[i]<0&&ExtSignalBuffer[i]>0&&ExtHistogramBuffer[i]>0)
+                    {
+                     ExtColorBuffer[i]=0;
+                    }
+                  else
+                     if(ExtMacdBuffer[i]<0&&ExtSignalBuffer[i]>0&&ExtHistogramBuffer[i]<0)
+                       {
+                        ExtColorBuffer[i]=4;
+                       }
+                     else
+                        if(ExtMacdBuffer[i]<0&&ExtSignalBuffer[i]<0&&ExtHistogramBuffer[i]>0)
+                          {
+                           ExtColorBuffer[i]=1;
+                          }
+                        else
+                           if(ExtMacdBuffer[i]<0&&ExtSignalBuffer[i]<0&&ExtHistogramBuffer[i]<0)
+                             {
+                              ExtColorBuffer[i]=5;
+                             }
+     }
+//--- OnCalculate done. Return new prev_calculated.
+   return(rates_total);
+  }
+//+------------------------------------------------------------------+
